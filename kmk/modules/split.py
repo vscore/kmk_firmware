@@ -6,7 +6,8 @@ from supervisor import runtime, ticks_ms
 
 from keypad import Event as KeyEvent
 from storage import getmount
-
+import wifi
+import socketpool
 from kmk.hid import HIDModes
 from kmk.kmktime import check_deadline
 from kmk.modules import Module
@@ -25,6 +26,8 @@ class SplitType:
     I2C = const(2)  # unused
     ONEWIRE = const(3)  # unused
     BLE = const(4)
+    WIFI = const(5)  # New SplitType for Wi-Fi
+
 
 
 class Split(Module):
@@ -41,6 +44,9 @@ class Split(Module):
         data_pin2=None,
         uart_flip=True,
         use_pio=False,
+        wifi_ssid=None,  # New Wi-Fi SSID
+        wifi_password=None,  # New Wi-Fi Password
+        wifi_port=12345,  # New Wi-Fi Port
     ):
         self._is_target = True
         self._uart_buffer = []
@@ -56,6 +62,18 @@ class Split(Module):
         self._uart = None
         self._uart_interval = uart_interval
         self.uart_header = bytearray([0xB2])  # Any non-zero byte should work
+        
+        # Wi-Fi specific attributes
+        self.wifi_ssid = wifi_ssid
+        self.wifi_password = wifi_password
+        self.wifi_port = wifi_port
+        self._wifi_socket = None
+        self._wifi_pool = None
+        self._wifi_server = None
+        self._wifi_client = None
+
+        if self.split_type == SplitType.WIFI:
+            self._setup_wifi()
 
         if self.split_type == SplitType.BLE:
             try:
@@ -84,6 +102,41 @@ class Split(Module):
             from kmk.transports.pio_uart import PIO_UART
 
             self.PIO_UART = PIO_UART
+
+    def _setup_wifi(self):
+        '''Set up Wi-Fi connection'''
+        try:
+            wifi.radio.connect(self.wifi_ssid, self.wifi_password)
+            self._wifi_pool = socketpool.SocketPool(wifi.radio)
+            if self._is_target:
+                # Set up as server
+                self._wifi_server = self._wifi_pool.socket()
+                self._wifi_server.settimeout(5)  # Set a timeout for accepting connections
+                self._wifi_server.bind(("0.0.0.0", self.wifi_port))
+                self._wifi_server.listen(1)
+                if debug.enabled:
+                    debug(f"Wi-Fi server started on port {self.wifi_port}")
+            else:
+                # Set up as client
+                self._wifi_client = self._wifi_pool.socket()
+                self._wifi_client.settimeout(5)  # Set a timeout for connecting
+                self._connect_to_server()
+        except Exception as e:
+            if debug.enabled:
+                debug(f"Wi-Fi setup failed: {e}")
+
+    def _connect_to_server(self):
+        '''Attempt to connect to the Wi-Fi server'''
+        try:
+            # Replace with the server's IP address if known
+            server_ip = wifi.radio.ipv4_address
+            self._wifi_client.connect((server_ip, self.wifi_port))
+            if debug.enabled:
+                debug(f"Wi-Fi client connected to server at {server_ip}:{self.wifi_port}")
+        except Exception as e:
+            if debug.enabled:
+                debug(f"Wi-Fi client connection failed: {e}")
+            self._wifi_client = None
 
     def during_bootup(self, keyboard):
         # Set up name for target side detection and BLE advertisment
@@ -177,6 +230,8 @@ class Split(Module):
         elif self.split_type == SplitType.UART:
             if self._is_target or self.data_pin2:
                 self._receive_uart(keyboard)
+        elif self.split_type == SplitType.WIFI:
+            self._receive_wifi(keyboard)
         elif self.split_type == SplitType.ONEWIRE:
             pass  # Protocol needs written
         return
@@ -190,6 +245,8 @@ class Split(Module):
                     pass  # explicit pass just for dev sanity...
             elif self.split_type == SplitType.BLE:
                 self._send_ble(keyboard.matrix_update)
+            elif self.split_type == SplitType.WIFI:
+                self._send_wifi(keyboard.matrix_update)
             elif self.split_type == SplitType.ONEWIRE:
                 pass  # Protocol needs written
             else:
@@ -389,3 +446,28 @@ class Split(Module):
                         self._uart_buffer.append(self._deserialize_update(update))
             if self._uart_buffer:
                 keyboard.secondary_matrix_update = self._uart_buffer.pop(0)
+
+    def _send_wifi(self, update):
+        '''Send matrix update over Wi-Fi'''
+        if self._wifi_client:
+            try:
+                self._wifi_client.send(self._serialize_update(update))
+            except Exception as e:
+                if debug.enabled:
+                    debug(f"Wi-Fi send failed: {e}")
+                self._connect_to_server()  # Attempt to reconnect if sending fails
+
+    def _receive_wifi(self, keyboard):
+        '''Receive matrix update over Wi-Fi'''
+        if self._wifi_server:
+            try:
+                conn, addr = self._wifi_server.accept()
+                conn.settimeout(5)  # Set a timeout for receiving data
+                data = conn.recv(1024)
+                if data:
+                    update = self._deserialize_update(data)
+                    keyboard.secondary_matrix_update = update
+                conn.close()
+            except Exception as e:
+                if debug.enabled:
+                    debug(f"Wi-Fi receive failed: {e}")
