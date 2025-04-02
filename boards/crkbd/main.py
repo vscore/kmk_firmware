@@ -19,7 +19,7 @@ rgb = RGB(
 
 # TODO Comment one of these on each side
 split_side = SplitSide.LEFT
-split_side = SplitSide.RIGHT
+#split_side = SplitSide.RIGHT
 split = Split(split_type=SplitType.BLE, split_side=split_side)
 
 # Uncomment this to use WiFi split instead of BLE split

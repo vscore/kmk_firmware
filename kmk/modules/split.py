@@ -1,5 +1,6 @@
 '''Enables splitting keyboards wirelessly or wired'''
 
+import traceback
 import busio
 from micropython import const
 from supervisor import runtime, ticks_ms
@@ -106,24 +107,32 @@ class Split(Module):
     def _setup_wifi(self):
         '''Set up Wi-Fi connection'''
         try:
-            wifi.radio.connect(self.wifi_ssid, self.wifi_password)
-            self._wifi_pool = socketpool.SocketPool(wifi.radio)
+            print("Debug: Set up Wi-Fi connection'", self.wifi_ssid, self.wifi_password)
+          
             if self._is_target:
-                # Set up as server
+                wifi.radio.start_ap(self.wifi_ssid, self.wifi_password, channel=6)  # Channel can be adjusted as needed
+                self._wifi_pool = socketpool.SocketPool(wifi.radio)
                 self._wifi_server = self._wifi_pool.socket()
                 self._wifi_server.settimeout(5)  # Set a timeout for accepting connections
                 self._wifi_server.bind(("0.0.0.0", self.wifi_port))
                 self._wifi_server.listen(1)
                 if debug.enabled:
+                    debug(f"Wi-Fi Access Point started with SSID: {self.wifi_ssid} on port {self.wifi_port}")
+
+                if debug.enabled:
                     debug(f"Wi-Fi server started on port {self.wifi_port}")
             else:
                 # Set up as client
+                wifi.radio.connect(self.wifi_ssid, self.wifi_password)
+                self._wifi_pool = socketpool.SocketPool(wifi.radio)
                 self._wifi_client = self._wifi_pool.socket()
                 self._wifi_client.settimeout(5)  # Set a timeout for connecting
                 self._connect_to_server()
         except Exception as e:
             if debug.enabled:
                 debug(f"Wi-Fi setup failed: {e}")
+                debug("Exception details:")
+                debug(traceback.format_exc())  # Print the full traceback
 
     def _connect_to_server(self):
         '''Attempt to connect to the Wi-Fi server'''
