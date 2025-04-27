@@ -13,13 +13,15 @@ put on your keyboard.
 - [HoldTap](holdtap.md): Adds support for augmented modifier keys to act as one key
 when tapped, and modifier when held.
 - [Macros](macros.md): Adds macros.
-- [Mouse keys](mouse_keys.md): Adds mouse keycodes.
-- [Sticky keys](sticky_keys.md): Adds support for sticky keys.
+- [Mouse Keys](mouse_keys.md): Adds mouse keycodes.
+- [SpaceMouse Keys](spacemouse_keys.md): Adds SpaceMouse keycodes.
+- [Sticky Keys](sticky_keys.md): Adds support for sticky keys.
 - [Power](power.md): Power saving features. This is mostly useful when on battery power.
 - [Split](split_keyboards.md): Keyboards split in two. Seems ergonomic!
 - [SerialACE](serialace.md): [DANGER - _see module README_] Arbitrary Code Execution over the data serial.
 - [TapDance](tapdance.md): Different key actions depending on how often it is pressed.
 - [Dynamic Sequences](dynamic_sequences.md): Records a sequence of keypresses and plays it back.
+- [Mouse Jiggler](mouse_jiggler.md): Periodically moves the mouse cursor to keep the host system awake.
 
 ### Require Libraries
 These modules can be used without specific hardware, but require additional libraries such as the `Adafruit CircuitPython Bundle`.
